@@ -3,3 +3,5 @@ __pycache__/
 .venv/
 venv/
 .env
+# App data: database, uploaded drawings, session key. Never commit these.
+data/

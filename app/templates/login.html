@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Log in{% endblock %}
+{% block mainclass %}center{% endblock %}
+{% block content %}
+<form method="post" action="/login" class="card login">
+  <h1>Aditya <span class="accent">mBoM</span></h1>
+  <p class="muted">Bill of materials costing and quotations</p>
+  <label>Username <input name="username" autocomplete="username" required autofocus></label>
+  <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+  <button class="primary" type="submit">Log in</button>
+</form>
+{% endblock %}

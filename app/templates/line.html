@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block title %}{{ line.description if line else 'New part' }}{% endblock %}
+{% block content %}
+{% set edit = can(user.role, 'edit_bom') %}
+{% set inp = line.calc_inputs if line else {} %}
+{% set method = line.costing_method if line else 'manual' %}
+<div class="pagehead">
+  <div>
+    <a class="crumb" href="/products/{{ p.id }}">← {{ p.name }}</a>
+    <h1>{{ line.description if line else 'New part' }}</h1>
+  </div>
+</div>
+
+<div class="linegrid">
+<form method="post" action="{{ '/lines/%d' % line.id if line else '/products/%d/lines/new' % p.id }}" id="lineform">
+<fieldset {% if not edit %}disabled{% endif %}>
+  <section class="card">
+    <h2>Part</h2>
+    <div class="row">
+      <label>Part #, rev <input name="part_no" value="{{ line.part_no if line }}"></label>
+      <label class="grow">Description <input name="description" value="{{ line.description if line }}" required></label>
+    </div>
+    <div class="row">
+      <label class="grow">Material spec <textarea name="material_spec" rows="2">{{ line.material_spec if line }}</textarea></label>
+      <label>Weight (g) <input name="weight_g" value="{{ line.weight_g|v if line }}" inputmode="decimal"></label>
+      <label>New / COP
+        <select name="new_cop">{% for o in ['', 'NEW', 'COP'] %}<option {{ 'selected' if line and line.new_cop == o }}>{{ o }}</option>{% endfor %}</select>
+      </label>
+      <label>Material type
+        <select name="mat_type">
+          {% for o in ['', 'BOP', 'CN (Consumables)', 'Cold Forging', 'Die Casting', 'Fine Blanking', 'Injection Molding', 'Lamination', 'Machining', 'Roll Forming', 'Rubber Part', 'Stamping', 'Sub Assembly', 'Wiring Harness'] %}
+          <option {{ 'selected' if line and line.mat_type == o }}>{{ o }}</option>{% endfor %}
+          {% if line and line.mat_type and line.mat_type not in ['', 'BOP', 'CN (Consumables)', 'Cold Forging', 'Die Casting', 'Fine Blanking', 'Injection Molding', 'Lamination', 'Machining', 'Roll Forming', 'Rubber Part', 'Stamping', 'Sub Assembly', 'Wiring Harness'] %}<option selected>{{ line.mat_type }}</option>{% endif %}
+        </select>
+      </label>
+    </div>
+    <h3>Quantity per variant</h3>
+    <div class="row">
+      {% for v in p.variants %}<label>{{ v.name }} <input name="qty_{{ v.id }}" value="{{ line.qty_for(v.id)|v if line }}" inputmode="decimal" class="short"></label>{% endfor %}
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Costing</h2>
+    <div class="methods">
+      <label class="method"><input type="radio" name="costing_method" value="manual" {{ 'checked' if method == 'manual' }}> <b>MasterBOM</b><span>Enter RM rate, economy factor and process cost directly (as in the MasterBOM sheet)</span></label>
+      <label class="method"><input type="radio" name="costing_method" value="plastic" {{ 'checked' if method == 'plastic' }}> <b>Plastic calculator</b><span>Injection moulding: material, runner, machine, cycle time</span></label>
+      <label class="method"><input type="radio" name="costing_method" value="sheet_metal" {{ 'checked' if method == 'sheet_metal' }}> <b>Sheet-metal calculator</b><span>Stamping stages, press tonnage, coating</span></label>
+    </div>
+
+    <div class="method-panel" data-method="manual">
+      <div class="row">
+        <label>RM rate (₹/kg) <input name="rm_rate_per_kg" value="{{ line.rm_rate_per_kg|v if line }}" inputmode="decimal"></label>
+        <label>Economy factor <input name="economy_factor" value="{{ line.economy_factor|v if line }}" inputmode="decimal"></label>
+        <label>Process (₹) <input name="process_cost" value="{{ line.process_cost|v if line }}" inputmode="decimal"></label>
+      </div>
+      <p class="muted small">Material = RM rate × (weight ÷ economy factor) ÷ 1000. OHP = process × the MasterBOM OHP rate (see Settings).</p>
+    </div>
+
+    <div class="method-panel" data-method="plastic">
+      <div class="row">
+        <label class="grow">Plastic material
+          <select name="pl_material_id">
+            <option value="">— choose —</option>
+            {% for m in plastics %}<option value="{{ m.id }}" {{ 'selected' if inp.get('material_id')|string == m.id|string }}>{{ m.grade }} · {{ m.manufacturer or '?' }} · ₹{{ m.cost_per_kg|num }}/kg</option>{% endfor %}
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label>Runner system
+          <select name="pl_runner_id"><option value="">— choose —</option>
+            {% for r in runners %}<option value="{{ r.id }}" {{ 'selected' if inp.get('runner_id')|string == r.id|string }}>{{ r.name }} ({{ r.wastage|pct }})</option>{% endfor %}
+          </select>
+        </label>
+        <label>Machine tonnage
+          <select name="pl_machine_id"><option value="">— choose —</option>
+            {% for m in machines %}<option value="{{ m.id }}" {{ 'selected' if inp.get('machine_id')|string == m.id|string }}>{{ m.tonnage }} (₹{{ m.machine_hour_rate|num(0) }}/hr)</option>{% endfor %}
+          </select>
+        </label>
+        <label>Cavities <input name="pl_cavities" value="{{ inp.get('cavities')|v }}" inputmode="decimal" class="short"></label>
+        <label>Cycle time (s) <input name="pl_cycle_time_s" value="{{ inp.get('cycle_time_s')|v }}" inputmode="decimal" class="short"></label>
+        <label>OHP % <input name="pl_ohp_pct" value="{{ (inp.get('ohp_rate', 0.12) * 100)|v(true) }}" inputmode="decimal" class="short"></label>
+      </div>
+      <p class="muted small">Uses the part weight above. {% if not plastics %}<b>No plastic materials yet. Import the workbook or add them under Rate databases.</b>{% endif %}</p>
+    </div>
+
+    <div class="method-panel" data-method="sheet_metal">
+      <div class="row">
+        <label class="grow">Sheet-metal material
+          <select name="sm_material_id"><option value="">— choose —</option>
+            {% for m in sheet_metals %}<option value="{{ m.id }}" {{ 'selected' if inp.get('material_id')|string == m.id|string }}>{{ m.grade }}{% if m.thickness_mm %} · {{ m.thickness_mm }} mm{% endif %} · ₹{{ m.cost_per_kg|num }}/kg</option>{% endfor %}
+          </select>
+        </label>
+        <label>Economy factor <input name="economy_factor" value="{{ line.economy_factor|v if line }}" inputmode="decimal" class="short" data-mirror="economy_factor"></label>
+      </div>
+      <table class="kv stages">
+        <tr><th>Stage</th><th>Press tonnage (T)</th><th>Cavities</th></tr>
+        {% set stages = inp.get('stages', []) %}
+        {% for i in range(8) %}{% set st = stages[i] if i < stages|length else {} %}
+        <tr>
+          <td><input name="st{{ i }}_name" value="{{ st.get('name', '') }}" placeholder="{{ ['Blanking','Forming-1','Forming-2','Piercing','Push-through','','',''][i] }}"></td>
+          <td><input name="st{{ i }}_tonnage" value="{{ st.get('tonnage')|v }}" inputmode="decimal" class="short"></td>
+          <td><input name="st{{ i }}_cavities" value="{{ st.get('cavities')|v }}" inputmode="decimal" class="short"></td>
+        </tr>{% endfor %}
+      </table>
+      <div class="row">
+        <label>Coating
+          <select name="sm_coating_id"><option value="">None</option>
+            {% for c in coatings %}<option value="{{ c.id }}" {{ 'selected' if inp.get('coating_id')|string == c.id|string }}>{{ c.name }} (₹{{ c.cost_per_sq_in }}/sq in)</option>{% endfor %}
+          </select>
+        </label>
+        <label>Surface area (sq in) <input name="sm_surface_area" value="{{ inp.get('surface_area_sq_in')|v }}" inputmode="decimal" class="short"></label>
+        <label>OHP % <input name="sm_ohp_pct" value="{{ (inp.get('ohp_rate', 0.10) * 100)|v(true) }}" inputmode="decimal" class="short"></label>
+      </div>
+      <p class="muted small">Leave unused stage rows empty. Presses above 400 T have no rate in the workbook's rule.</p>
+    </div>
+
+    <h3>Also added to the part cost</h3>
+    <div class="row">
+      <label>Heat treatment (₹) <input name="heat_treatment" value="{{ line.heat_treatment|v if line }}" inputmode="decimal"></label>
+      <label class="manual-only">Coating (₹) <input name="coating_cost" value="{{ line.coating_cost|v if line }}" inputmode="decimal"></label>
+      <label>Bought-out part price (₹) <input name="bop_cost" value="{{ line.bop_cost|v if line }}" inputmode="decimal"></label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Supply, tooling &amp; investment</h2>
+    <div class="row">
+      <label class="grow">Supplier <input name="supplier" value="{{ line.supplier if line }}"></label>
+      <label class="grow">Tooling description <input name="tooling_description" value="{{ line.tooling_description if line }}"></label>
+    </div>
+    <div class="row">
+      <label>Tool cavities <input name="cavities" value="{{ line.cavities|v if line }}" inputmode="decimal" class="short"></label>
+      <label>Tool cycle time (s) <input name="cycle_time_s" value="{{ line.cycle_time_s|v if line }}" inputmode="decimal" class="short"></label>
+      <label>Tool owner
+        <select name="tool_owner">{% for o in ['', 'Aditya', 'Customer'] %}<option {{ 'selected' if line and line.tool_owner == o }}>{{ o }}</option>{% endfor %}</select>
+      </label>
+      <label>Tooling cost (₹) <input name="tooling_cost" value="{{ line.tooling_cost|num(0, true) if line }}" inputmode="decimal"></label>
+      <label>Fixture &amp; gauge (₹) <input name="fixture_gauge_cost" value="{{ line.fixture_gauge_cost|num(0, true) if line }}" inputmode="decimal"></label>
+      <label>Machinery (₹) <input name="machinery_cost" value="{{ line.machinery_cost|num(0, true) if line }}" inputmode="decimal"></label>
+    </div>
+    <label>Comments <textarea name="comments" rows="2">{{ line.comments if line }}</textarea></label>
+  </section>
+
+  {% if edit %}
+  <div class="savebar">
+    <button class="primary" type="submit">{{ 'Save and recalculate' if line else 'Add part' }}</button>
+    <a href="/products/{{ p.id }}">Cancel</a>
+  </div>
+  {% endif %}
+</fieldset>
+</form>
+
+<aside>
+  {% if result %}{% set e = result.engine_line %}{% set d = result.detail %}
+  <section class="card result">
+    <h2>Part cost</h2>
+    {% if result.error %}<div class="flash error">{{ result.error }}</div>{% endif %}
+    <table class="kv">
+      {% if method == 'plastic' and d %}
+        <tr><td>Material per part (incl. runner)</td><td class="n">{{ d.material_per_part_g|num(2) }} g</td></tr>
+        <tr><td>Material [A]</td><td class="n">{{ d.material_cost|inr(3) }}</td></tr>
+        <tr><td>Output per hour</td><td class="n">{{ d.output_per_hour }}</td></tr>
+        <tr><td>Process [B]</td><td class="n">{{ d.process_cost|inr(3) }}</td></tr>
+        <tr><td>OHP [C]</td><td class="n">{{ d.ohp|inr(3) }}</td></tr>
+        <tr><td>Packing &amp; transport [D]</td><td class="n">{{ d.packing_transport|inr(3) }}</td></tr>
+      {% elif method == 'sheet_metal' and d %}
+        <tr><td>Input weight (norms)</td><td class="n">{{ d.input_weight_g|num(1) }} g</td></tr>
+        <tr><td>Material [A]</td><td class="n">{{ d.material_cost|inr(3) }}</td></tr>
+        <tr><td>Stamping incl. profit &amp; rejection [B]</td><td class="n">{{ d.stamping_cost|inr(3) }}</td></tr>
+        <tr><td>Coating [C]</td><td class="n">{{ d.coating_cost|inr(3) }}</td></tr>
+        <tr><td>OHP</td><td class="n">{{ d.ohp|inr(3) }}</td></tr>
+        <tr><td>Packing &amp; transport</td><td class="n">{{ d.packing_transport|inr(3) }}</td></tr>
+      {% else %}
+        <tr><td>Norms (input weight)</td><td class="n">{{ e.norms_g|num(1) }} g</td></tr>
+        <tr><td>Material</td><td class="n">{{ e.material|inr(3) }}</td></tr>
+        <tr><td>Process</td><td class="n">{{ e.process|inr(3) }}</td></tr>
+        <tr><td>OHP ({{ e.ohp_rate|pct }} of process)</td><td class="n">{{ e.ohp|inr(3) }}</td></tr>
+      {% endif %}
+      {% if e.heat_treatment %}<tr><td>Heat treatment</td><td class="n">{{ e.heat_treatment|inr(3) }}</td></tr>{% endif %}
+      {% if method != 'sheet_metal' and e.coating %}<tr><td>Coating</td><td class="n">{{ e.coating|inr(3) }}</td></tr>{% endif %}
+      {% if e.bop %}<tr><td>Bought-out price</td><td class="n">{{ e.bop|inr(3) }}</td></tr>{% endif %}
+      <tr class="sum"><td>Cost per part</td><td class="n">{{ e.total|inr(3) }}</td></tr>
+      {% if result.capacity %}<tr><td>Tool capacity / month</td><td class="n">{{ result.capacity|num(0) }}</td></tr>{% endif %}
+    </table>
+  </section>
+  {% endif %}
+
+  {% if line %}
+  <section class="card" id="files">
+    <h2>Drawings &amp; documents</h2>
+    {% if line.attachments %}
+    <ul class="files">
+      {% for a in line.attachments %}
+      <li>
+        <a href="/attachments/{{ a.id }}">{{ a.filename }}</a>
+        <span class="muted small">{{ (a.size_bytes / 1024)|num(0) }} KB · {{ a.uploaded_by }} · {{ a.uploaded_at.strftime('%d %b %Y') }}</span>
+        {% if edit %}<form method="post" action="/attachments/{{ a.id }}/delete" onsubmit="return confirm('Delete {{ a.filename }}?')"><button class="link danger">Delete</button></form>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted">No files yet.</p>{% endif %}
+    {% if edit %}
+    <form method="post" action="/lines/{{ line.id }}/attachments" enctype="multipart/form-data" class="upload">
+      <input type="file" name="file" accept=".pdf,.step,.stp,.igs,.iges,.dwg,.dxf,.png,.jpg,.jpeg,.xlsx,.xls">
+      <button type="submit">Upload</button>
+    </form>
+    <p class="muted small">PDF, STEP, IGES, DWG/DXF, images or quotes, up to 50 MB. Reading weight and material from drawings automatically comes in a later step.</p>
+    {% endif %}
+  </section>
+  {% if edit %}
+  <form method="post" action="/lines/{{ line.id }}/delete" onsubmit="return confirm('Delete this part from the BOM?')">
+    <button class="link danger">Delete this part</button>
+  </form>
+  {% endif %}
+  {% endif %}
+</aside>
+</div>
+
+<script>
+(function () {
+  const form = document.getElementById('lineform');
+  function show() {
+    const m = form.querySelector('input[name=costing_method]:checked').value;
+    form.querySelectorAll('.method-panel').forEach(p => {
+      const on = p.dataset.method === m;
+      p.hidden = !on;
+      // Only the visible panel's inputs are submitted, so the shared economy factor isn't sent twice
+      p.querySelectorAll('input, select').forEach(i => i.disabled = !on || form.querySelector('fieldset').disabled);
+    });
+    form.querySelectorAll('.manual-only').forEach(el => el.hidden = (m === 'sheet_metal'));
+  }
+  form.querySelectorAll('input[name=costing_method]').forEach(r => r.addEventListener('change', show));
+  show();
+})();
+</script>
+{% endblock %}

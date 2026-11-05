@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}{{ p.name }}{% endblock %}
+{% block mainclass %}wide{% endblock %}
+{% block content %}
+{% set edit = can(user.role, 'edit_bom') %}
+<div class="pagehead">
+  <div>
+    <a class="crumb" href="/">← Products</a>
+    <h1>{{ p.name }}</h1>
+    {% if p.customer %}<p class="muted">Customer: {{ p.customer }}</p>{% endif %}
+  </div>
+  {% if edit %}<div class="actions"><a class="button primary" href="/products/{{ p.id }}/lines/new">Add part</a></div>{% endif %}
+</div>
+
+{% for v, r in sm.variants %}
+<section class="summary">
+  <div class="variant-name">{{ v.name }}{% if v.part_no %} <span class="muted">· {{ v.part_no }}</span>{% endif %}</div>
+  <div class="tiles">
+    <div class="tile big"><span>Cost per unit</span><strong>{{ r.total|inr }}</strong><small>child parts, as in MasterBOM</small></div>
+    <div class="tile"><span>Assembly (labour + line)</span><strong>{{ sm.assembly.total|inr if sm.assembly else '—' }}</strong><small>{% if sm.assembly %}{{ sm.assembly.labour_per_part|inr }} + {{ sm.assembly.amortization_per_part|inr }}{% else %}{{ sm.assembly_error or 'not set' }}{% endif %}</small></div>
+    <div class="tile big accent"><span>Cost incl. assembly</span><strong>{{ (r.total + (sm.assembly.total if sm.assembly else 0))|inr }}</strong><small>not yet including margin</small></div>
+    <div class="tile"><span>Weight</span><strong>{{ r.weight_g|num(1) }} g</strong></div>
+    <div class="tile"><span>Monthly volume</span><strong>{{ v.monthly_volume|num(0) }}</strong></div>
+  </div>
+  <div class="scroll"><table class="breakdown">
+    <tr><th>Material</th><th>Process</th><th>HT</th><th>Coating</th><th>OHP</th><th>Packing &amp; transport</th><th>BOP</th><th>Total</th></tr>
+    <tr>
+      <td>{{ r.material|inr }}</td><td>{{ r.process|inr }}</td><td>{{ r.heat_treatment|inr }}</td><td>{{ r.coating|inr }}</td>
+      <td>{{ r.ohp|inr }}</td><td>{{ r.packing_transport|inr }}</td><td>{{ r.bop|inr }}</td><td><strong>{{ r.total|inr }}</strong></td>
+    </tr>
+  </table></div>
+</section>
+{% else %}
+<div class="flash warn">This product has no variants. Add one under "Product details" below.</div>
+{% endfor %}
+
+<h2>Child parts <span class="muted">({{ sm.lines|length }})</span></h2>
+<div class="scroll">
+<table class="grid bom">
+  <thead>
+    <tr>
+      <th>#</th><th>Part #</th><th class="desc">Description</th><th>Material spec</th><th>Costed by</th>
+      <th class="n">Weight (g)</th>
+      {% for v in p.variants %}<th class="n qty" title="{{ v.name }}">Qty<br><small>{{ v.name[:14] }}</small></th>{% endfor %}
+      <th class="n">RM ₹/kg</th><th class="n">Econ. factor</th><th class="n">Norms (g)</th>
+      <th class="n">Material</th><th class="n">Process</th><th class="n">HT</th><th class="n">Coating</th><th class="n">OHP</th><th class="n">P&amp;T</th><th class="n">BOP</th>
+      <th class="n total">Total</th><th class="n">Monthly vol.</th><th class="n">Capacity / month</th><th>Tool owner</th><th class="n">Tooling</th><th>Files</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for r in sm.lines %}
+    {% set l = r.line %}{% set e = r.engine_line %}
+    <tr class="link{% if r.error %} haserror{% endif %}" onclick="location.href='/lines/{{ l.id }}'">
+      <td>{{ loop.index }}</td>
+      <td>{{ l.part_no }}</td>
+      <td class="desc"><a href="/lines/{{ l.id }}">{{ l.description or '(no description)' }}</a>{% if r.error %}<div class="err">{{ r.error }}</div>{% endif %}</td>
+      <td class="spec">{{ l.material_spec.split('\n')[0] }}</td>
+      <td><span class="badge {{ l.costing_method }}">{{ {'manual':'MasterBOM','plastic':'Plastic calc','sheet_metal':'Sheet-metal calc'}[l.costing_method] }}</span></td>
+      <td class="n">{{ l.weight_g|num(2, true) }}</td>
+      {% for v in p.variants %}<td class="n qty">{{ l.qty_for(v.id)|num(0, true) }}</td>{% endfor %}
+      <td class="n">{{ e.rm_rate_per_kg|num(2, true) }}</td>
+      <td class="n">{{ e.economy_factor|num(3, true) }}</td>
+      <td class="n">{{ e.norms_g|num(1, true) }}</td>
+      <td class="n">{{ e.material|num(2, true) }}</td>
+      <td class="n">{{ e.process|num(2, true) }}</td>
+      <td class="n">{{ e.heat_treatment|num(2, true) }}</td>
+      <td class="n">{{ e.coating|num(2, true) }}</td>
+      <td class="n">{{ e.ohp|num(2, true) }}</td>
+      <td class="n">{{ e.packing_transport|num(2, true) }}</td>
+      <td class="n">{{ e.bop|num(2, true) }}</td>
+      <td class="n total">{{ e.total|num(2, true) }}</td>
+      <td class="n">{{ r.monthly_volume|num(0, true) }}</td>
+      <td class="n">{{ r.capacity|num(0) if r.capacity else '' }}</td>
+      <td>{{ l.tool_owner }}</td>
+      <td class="n">{{ l.tooling_cost|num(0, true) }}</td>
+      <td>{% if l.attachments %}📎 {{ l.attachments|length }}{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<div class="two">
+<section class="card">
+  <h2>Investment</h2>
+  <table class="kv">
+    <tr><th></th><th class="n">Tooling</th><th class="n">Fixture &amp; gauge</th><th class="n">Machinery</th><th class="n">Total</th></tr>
+    {% for owner in ('Aditya', 'Customer') %}{% set i = sm.investment[owner] %}
+    <tr><td>{{ owner }}-owned</td><td class="n">{{ i.tooling|inr(0) }}</td><td class="n">{{ i.fixture_gauge|inr(0) }}</td><td class="n">{{ i.machinery|inr(0) }}</td><td class="n">{{ i.total|inr(0) }}</td></tr>
+    {% endfor %}
+    <tr><td>ED&amp;D</td><td colspan="3"></td><td class="n">{{ p.edd_cost|inr(0) }}</td></tr>
+    <tr><td>Validation</td><td colspan="3"></td><td class="n">{{ p.validation_cost|inr(0) }}</td></tr>
+    <tr class="sum"><td>Total (Aditya + ED&amp;D + validation)</td><td colspan="3"></td><td class="n">{{ sm.total_investment|inr(0) }}</td></tr>
+  </table>
+  <p class="muted small">Investment is not yet spread into the piece price. That will come with the quotation step, once the amortization rule is decided.</p>
+</section>
+
+<section class="card">
+  <h2>Product details, variants &amp; assembly</h2>
+  <form method="post" action="/products/{{ p.id }}/edit">
+  <fieldset {% if not edit %}disabled{% endif %}>
+    <div class="row">
+      <label>Product name <input name="name" value="{{ p.name }}"></label>
+      <label>Customer <input name="customer" value="{{ p.customer }}"></label>
+    </div>
+    <h3>Variants</h3>
+    <table class="kv">
+      <tr><th>Variant name</th><th>Part #</th><th class="n">Monthly volume</th><th></th></tr>
+      {% for v in p.variants %}
+      <tr>
+        <td><input name="v{{ v.id }}_name" value="{{ v.name }}"></td>
+        <td><input name="v{{ v.id }}_part_no" value="{{ v.part_no }}" class="short"></td>
+        <td><input name="v{{ v.id }}_volume" value="{{ v.monthly_volume|num(0) }}" class="short n" inputmode="decimal"></td>
+        <td>{% if edit and p.variants|length > 1 %}<button class="link danger" formaction="/products/{{ p.id }}/variants/{{ v.id }}/delete" onclick="return confirm('Delete variant {{ v.name }} and its quantities?')">Delete</button>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      <tr>
+        <td><input name="new_variant_name" placeholder="Add a variant…"></td>
+        <td><input name="new_variant_part_no" class="short" placeholder="Part #"></td>
+        <td><input name="new_variant_volume" class="short n" placeholder="Volume" inputmode="decimal"></td><td></td>
+      </tr>
+    </table>
+    <h3>Assembly cost <span class="muted small">(the "Costing - Assy" sheet)</span></h3>
+    <div class="row">
+      <label>Manpower (at any time) <input name="asm_manpower" value="{{ p.asm_manpower|num(0) }}" inputmode="decimal"></label>
+      <label>Bottleneck cycle time (s) <input name="asm_cycle_time_s" value="{{ p.asm_cycle_time_s|v(true) }}" inputmode="decimal"></label>
+      <label>Efficiency (0.8 = 80%) <input name="asm_efficiency" value="{{ p.asm_efficiency|v(true) }}" inputmode="decimal"></label>
+      <label>Man-hour cost (₹) <input name="asm_man_hour_cost" value="{{ p.asm_man_hour_cost|v(true) }}" inputmode="decimal"></label>
+    </div>
+    <div class="row">
+      <label>Line cost, specific (₹) <input name="asm_line_cost_specific" value="{{ p.asm_line_cost_specific|num(0) }}" inputmode="decimal"></label>
+      <label>Line cost, shared (₹) <input name="asm_line_cost_shared" value="{{ p.asm_line_cost_shared|num(0) }}" inputmode="decimal"></label>
+      <label>Shared line utilization <input name="asm_line_utilization" value="{{ p.asm_line_utilization|v(true) }}" inputmode="decimal"></label>
+      <label>Amortization volume <input name="asm_amortization_volume" value="{{ p.asm_amortization_volume|num(0) }}" inputmode="decimal"></label>
+    </div>
+    {% if sm.assembly %}<p class="muted small">Output {{ sm.assembly.output_per_hour }} parts/hr · labour {{ sm.assembly.labour_per_part|inr }} · line amortization {{ sm.assembly.amortization_per_part|inr }} · total {{ sm.assembly.total|inr }} per unit</p>{% endif %}
+    <h3>Other</h3>
+    <div class="row">
+      <label>ED&amp;D cost (₹) <input name="edd_cost" value="{{ p.edd_cost|num(0) }}" inputmode="decimal"></label>
+      <label>Validation cost (₹) <input name="validation_cost" value="{{ p.validation_cost|num(0) }}" inputmode="decimal"></label>
+      <label>USD → INR <input name="usd_inr" value="{{ p.usd_inr|v(true) }}" inputmode="decimal"></label>
+      <label>EUR → INR <input name="eur_inr" value="{{ p.eur_inr|v(true) }}" inputmode="decimal"></label>
+    </div>
+    <label>Notes <textarea name="notes" rows="2">{{ p.notes }}</textarea></label>
+    {% if edit %}<button class="primary">Save product</button>{% endif %}
+  </fieldset>
+  </form>
+  {% if edit %}
+  <form method="post" action="/products/{{ p.id }}/delete" onsubmit="return confirm('Delete {{ p.name }} and all its parts and files? This cannot be undone.')">
+    <button class="link danger">Delete this product</button>
+  </form>
+  {% endif %}
+</section>
+</div>
+{% endblock %}

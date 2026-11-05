@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+{% set edit = can(user.role, 'edit_settings') %}
+<div class="pagehead"><h1>Costing settings</h1></div>
+<form method="post" action="/settings" class="card narrowish">
+  <p>These are the constants that were typed into the workbook's formulas. Changing one recalculates every product. Margin, rejection and amortization rules will be added here once you've confirmed them.</p>
+  <fieldset {% if not edit %}disabled{% endif %}>
+  <table class="kv">
+    <tr><th>Setting</th><th class="n">Value</th><th class="n">Workbook value</th></tr>
+    {% for key, (label, help) in labels.items() %}
+    <tr>
+      <td>{{ label }}{% if help %}<div class="muted small">{{ help }}</div>{% endif %}</td>
+      <td class="n"><input name="{{ key }}" value="{{ values[key] }}" class="n short" inputmode="decimal"></td>
+      <td class="n muted">{{ defaults[key] }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% if edit %}<button class="primary">Save settings</button>{% else %}<p class="muted small">Only an admin can change settings.</p>{% endif %}
+  </fieldset>
+</form>
+{% endblock %}

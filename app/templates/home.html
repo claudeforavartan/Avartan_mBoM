@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Products{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <h1>Products</h1>
+  {% if can(user.role, 'edit_bom') %}
+  <div class="actions">
+    <a class="button" href="/import">Import MasterBOM Excel</a>
+    <details class="popover">
+      <summary class="button primary">New product</summary>
+      <form method="post" action="/products/new" class="card">
+        <label>Product name <input name="name" required></label>
+        <label>Customer <input name="customer"></label>
+        <button class="primary">Create</button>
+      </form>
+    </details>
+  </div>
+  {% endif %}
+</div>
+
+{% if not rows %}
+<div class="card empty">
+  <h2>No products yet</h2>
+  {% if can(user.role, 'import') %}
+  <p>Start by importing your MasterBOM workbook. That loads the BOM <em>and</em> the rate databases (plastic and sheet-metal materials, machines, runners, coatings).</p>
+  <p><a class="button primary" href="/import">Import MasterBOM Excel</a></p>
+  {% else %}
+  <p>Ask someone from Engineering or an admin to import or create a product.</p>
+  {% endif %}
+</div>
+{% else %}
+<div class="scroll"><table class="grid">
+  <thead><tr><th>Product</th><th>Customer</th><th>Variants</th><th class="n">Parts</th><th class="n">Cost / unit</th><th class="n">Incl. assembly</th><th class="n">Investment</th><th>Updated</th></tr></thead>
+  <tbody>
+  {% for p, sm in rows %}
+    {% set first = sm.variants[0][1] if sm.variants else none %}
+    <tr class="link" onclick="location.href='/products/{{ p.id }}'">
+      <td><a href="/products/{{ p.id }}">{{ p.name }}</a></td>
+      <td>{{ p.customer }}</td>
+      <td>{{ p.variants|length }}</td>
+      <td class="n">{{ p.lines|length }}</td>
+      <td class="n">{{ first.total|inr if first else '' }}{% if sm.variants|length > 1 %} <span class="muted">(1st variant)</span>{% endif %}</td>
+      <td class="n">{{ (first.total + (sm.assembly.total if sm.assembly else 0))|inr if first else '' }}</td>
+      <td class="n">{{ sm.total_investment|inr(0) }}</td>
+      <td>{{ p.updated_at.strftime('%d %b %Y') }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endif %}
+{% endblock %}

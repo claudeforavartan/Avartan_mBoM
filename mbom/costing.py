@@ -13,14 +13,21 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-# Hard-coded constants found in the workbook. Later these become settings.
-MOULDING_EFFICIENCY = 0.85        # 'Plastic parts- Costing'!F31
-PACKING_TRANSPORT_RATE = 0.02     # 2% used on both costing sheets
-STAMPING_PROFIT_REJECTION = 0.10  # 'Sheet metal- Costing'!F28
-# MasterBOM column AR: OHP = PROCESS * (27% + 20% + 2%)
-MASTERBOM_OHP_RATES = (0.27, 0.20, 0.02)
-# MasterBOM column BC: 20 days x 3 shifts x 25,900 s
-CAPACITY_SECONDS_PER_MONTH = 20 * 3 * 25900
+@dataclass
+class CostSettings:
+    """Constants that were hard-coded in the workbook. The app lets an admin change them."""
+    moulding_efficiency: float = 0.85         # 'Plastic parts- Costing'!F31
+    packing_transport_rate: float = 0.02      # 2% on both costing sheets
+    stamping_profit_rejection: float = 0.10   # 'Sheet metal- Costing'!F28
+    masterbom_ohp_rate: float = 0.49          # MasterBOM AR: PROCESS * (27% + 20% + 2%)
+    capacity_seconds_per_month: float = 20 * 3 * 25900  # MasterBOM BC: 20 days x 3 shifts x 25,900 s
+    # Stamping thumb rule, Rs per tonne per stroke ('Sheet metal- Costing'!D21)
+    stamping_rate_below_200t: float = 0.005
+    stamping_rate_upto_300t: float = 0.01
+    stamping_rate_upto_400t: float = 0.015
+
+
+DEFAULT_SETTINGS = CostSettings()
 
 
 # --------------------------------------------------------------------------
@@ -48,14 +55,14 @@ class PlasticPartCost:
     total: float                  # [A+B+C+D]
 
 
-def plastic_part_cost(p: PlasticPartInput) -> PlasticPartCost:
+def plastic_part_cost(p: PlasticPartInput, s: CostSettings = DEFAULT_SETTINGS) -> PlasticPartCost:
     sprue_g = p.runner_wastage * p.part_weight_g                       # F19
     material_g = p.part_weight_g + sprue_g                             # F20
     material = p.rm_cost_per_kg * material_g / 1000                    # F22
-    output = math.floor(3600 * p.cavities * MOULDING_EFFICIENCY / p.cycle_time_s)  # F31
+    output = math.floor(3600 * p.cavities * s.moulding_efficiency / p.cycle_time_s)  # F31
     process = p.machine_hour_rate / output                             # F32
     ohp = p.ohp_rate * process                                         # F35
-    pt = PACKING_TRANSPORT_RATE * (ohp + process + material)           # F36
+    pt = s.packing_transport_rate * (ohp + process + material)           # F36
     return PlasticPartCost(material_g, material, output, process, ohp, pt,
                            material + process + ohp + pt)              # F38
 
@@ -63,18 +70,18 @@ def plastic_part_cost(p: PlasticPartInput) -> PlasticPartCost:
 # --------------------------------------------------------------------------
 # Sheet metal (stamped) part  -- sheet 'Sheet metal- Costing'
 # --------------------------------------------------------------------------
-def stamping_cost_per_stroke(tonnage: float) -> float:
+def stamping_cost_per_stroke(tonnage: float, s: CostSettings = DEFAULT_SETTINGS) -> float:
     """Thumb rule from D21:D26. Rs per 100 T: 0.5 below 200 T, 1.0 to 300 T, 1.5 to 400 T.
 
     The note on the sheet says 0.55 per 100 T below 200 T, but the formula
     uses 0.5. The formula is kept here; see the analysis doc.
     """
     if tonnage < 200:
-        return tonnage * 0.005
+        return tonnage * s.stamping_rate_below_200t
     if tonnage <= 300:
-        return tonnage * 0.01
+        return tonnage * s.stamping_rate_upto_300t
     if tonnage <= 400:
-        return tonnage * 0.015
+        return tonnage * s.stamping_rate_upto_400t
     raise ValueError(f"No stamping rate defined for presses above 400 T (got {tonnage} T)")
 
 
@@ -84,9 +91,8 @@ class StampingStage:
     tonnage: float
     cavities: int = 1
 
-    @property
-    def cost(self) -> float:
-        return stamping_cost_per_stroke(self.tonnage) / self.cavities   # F21:F26
+    def cost(self, s: CostSettings = DEFAULT_SETTINGS) -> float:
+        return stamping_cost_per_stroke(self.tonnage, s) / self.cavities   # F21:F26
 
 
 @dataclass
@@ -112,15 +118,15 @@ class SheetMetalPartCost:
     total: float
 
 
-def sheet_metal_part_cost(p: SheetMetalPartInput) -> SheetMetalPartCost:
+def sheet_metal_part_cost(p: SheetMetalPartInput, s: CostSettings = DEFAULT_SETTINGS) -> SheetMetalPartCost:
     input_g = p.part_weight_g / p.economy_factor                       # F16
     material = input_g * p.rm_cost_per_kg / 1000                       # F17
-    stages = sum(s.cost for s in p.stages)                             # F27
-    stamping = stages * (1 + STAMPING_PROFIT_REJECTION)                # F28:F29
+    stages = sum(st.cost(s) for st in p.stages)                             # F27
+    stamping = stages * (1 + s.stamping_profit_rejection)                # F28:F29
     coating = p.coating_rate_per_sq_in * p.surface_area_sq_in          # F35
     process = stamping + coating                                       # F36 (fixed: Excel adds F34, a text cell)
     ohp = process * p.ohp_rate                                         # F38
-    pt = (material + process) * PACKING_TRANSPORT_RATE                 # F39 (excludes OHP, unlike plastics)
+    pt = (material + process) * s.packing_transport_rate                 # F39 (excludes OHP, unlike plastics)
     return SheetMetalPartCost(input_g, material, stamping, coating, process, ohp, pt,
                               material + process + ohp + pt)           # F41
 
@@ -175,6 +181,12 @@ class BomLine:
     tooling_cost: float = 0.0             # BG
     fixture_gauge_cost: float = 0.0       # BH
     machinery_cost: float = 0.0           # BI
+    ohp_rate: float = DEFAULT_SETTINGS.masterbom_ohp_rate
+    # New in the app: a line costed with a part calculator carries the
+    # calculator's own material, OHP and packing & transport figures.
+    packing_transport: float = 0.0
+    material_override: float | None = None
+    ohp_override: float | None = None
 
     @property
     def norms_g(self) -> float:           # AM
@@ -182,15 +194,20 @@ class BomLine:
 
     @property
     def material(self) -> float:          # AN
+        if self.material_override is not None:
+            return self.material_override
         return self.rm_rate_per_kg * self.norms_g / 1000
 
     @property
     def ohp(self) -> float:               # AR
-        return self.process * sum(MASTERBOM_OHP_RATES)
+        if self.ohp_override is not None:
+            return self.ohp_override
+        return self.process * self.ohp_rate
 
     @property
     def total(self) -> float:             # AT
-        return self.material + self.process + self.heat_treatment + self.coating + self.ohp + self.bop
+        return (self.material + self.process + self.heat_treatment + self.coating
+                + self.ohp + self.packing_transport + self.bop)
 
 
 @dataclass
@@ -201,11 +218,13 @@ class VariantRollup:
     heat_treatment: float
     coating: float
     ohp: float
+    packing_transport: float
     bop: float
 
     @property
     def total(self) -> float:
-        return self.material + self.process + self.heat_treatment + self.coating + self.ohp + self.bop
+        return (self.material + self.process + self.heat_treatment + self.coating
+                + self.ohp + self.packing_transport + self.bop)
 
 
 def rollup(lines: list[BomLine], variant: str) -> VariantRollup:
@@ -213,7 +232,7 @@ def rollup(lines: list[BomLine], variant: str) -> VariantRollup:
     def sp(attr: str) -> float:
         return sum(getattr(l, attr) * l.qty_per_variant.get(variant, 0) for l in lines)
     return VariantRollup(sp("weight_g"), sp("material"), sp("process"), sp("heat_treatment"),
-                         sp("coating"), sp("ohp"), sp("bop"))
+                         sp("coating"), sp("ohp"), sp("packing_transport"), sp("bop"))
 
 
 def investment_by_owner(lines: list[BomLine], owner: str) -> dict[str, float]:
@@ -225,6 +244,6 @@ def investment_by_owner(lines: list[BomLine], owner: str) -> dict[str, float]:
     return {"tooling": tooling, "fixture_gauge": fg, "machinery": mach, "total": tooling + fg + mach}
 
 
-def monthly_capacity(cavities: int, cycle_time_s: float) -> float:
+def monthly_capacity(cavities: int, cycle_time_s: float, s: CostSettings = DEFAULT_SETTINGS) -> float:
     """MasterBOM column BC."""
-    return CAPACITY_SECONDS_PER_MONTH * cavities / cycle_time_s
+    return s.capacity_seconds_per_month * cavities / cycle_time_s

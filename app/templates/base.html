@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Aditya mBoM{% endblock %} · Aditya mBoM</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+{% if user %}
+<header class="topbar">
+  <a class="brand" href="/">Aditya <span>mBoM</span></a>
+  <nav>
+    <a href="/" class="{{ 'active' if request.url.path == '/' or request.url.path.startswith('/products') or request.url.path.startswith('/lines') }}">Products</a>
+    <a href="/rates/plastic" class="{{ 'active' if request.url.path.startswith('/rates') }}">Rate databases</a>
+    {% if can(user.role, 'import') %}<a href="/import" class="{{ 'active' if request.url.path == '/import' }}">Import Excel</a>{% endif %}
+    <a href="/settings" class="{{ 'active' if request.url.path == '/settings' }}">Settings</a>
+    {% if can(user.role, 'manage_users') %}<a href="/users" class="{{ 'active' if request.url.path == '/users' }}">Users</a>{% endif %}
+  </nav>
+  <div class="who">
+    <span>{{ user.full_name or user.username }} · {{ ROLES[user.role] }}</span>
+    <a href="/account/password">Password</a>
+    <a href="/logout">Log out</a>
+  </div>
+</header>
+{% endif %}
+<main class="{% block mainclass %}{% endblock %}">
+  {% for kind, msg in messages or [] %}<div class="flash {{ kind }}">{{ msg }}</div>{% endfor %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

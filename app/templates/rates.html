@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}{{ cfg.title }}{% endblock %}
+{% block mainclass %}wide{% endblock %}
+{% block content %}
+{% set edit = can(user.role, 'edit_rates') %}
+<div class="pagehead"><h1>Rate databases</h1></div>
+<nav class="tabs">
+  {% for key, t in tables.items() %}<a href="/rates/{{ key }}" class="{{ 'active' if key == table }}">{{ t.title.split(' (')[0] }}</a>{% endfor %}
+</nav>
+<div class="toolbar">
+  <h2>{{ cfg.title }} <span class="muted">({{ rows|length }})</span></h2>
+  <form method="get"><input name="q" value="{{ q }}" placeholder="Search…"> <button>Search</button>{% if q %} <a href="/rates/{{ table }}">Clear</a>{% endif %}</form>
+</div>
+{% if not edit %}<p class="muted small">Only Purchase or an admin can change rates.</p>{% endif %}
+{% if dupes %}<p class="flash warn">Grades marked <span class="dupe">duplicate</span> appear more than once with different manufacturers or prices. Check which entry is correct.</p>{% endif %}
+<div class="scroll">
+<table class="grid rates">
+  <thead><tr>{% for name, label, kind in cfg.fields %}<th class="{{ 'n' if kind == 'number' }}">{{ label }}</th>{% endfor %}{% if edit %}<th></th>{% endif %}</tr></thead>
+  <tbody>
+  {% if edit %}
+  <tr class="addrow">
+    <form method="post" action="/rates/{{ table }}" id="add"></form>
+    {% for name, label, kind in cfg.fields %}<td><input form="add" name="{{ name }}" placeholder="{{ label }}" class="{{ 'n short' if kind == 'number' }}" {{ 'inputmode=decimal' if kind == 'number' }}></td>{% endfor %}
+    <td><button form="add" class="primary">Add</button></td>
+  </tr>
+  {% endif %}
+  {% for r in rows %}
+  <tr>
+    {% if edit %}<form method="post" action="/rates/{{ table }}/{{ r.id }}" id="r{{ r.id }}"><input type="hidden" name="q" value="{{ q }}"></form>{% endif %}
+    {% for name, label, kind in cfg.fields %}{% set cell = r[name] %}
+    <td class="{{ 'n' if kind == 'number' }}">
+      {% if edit %}<input form="r{{ r.id }}" name="{{ name }}" value="{{ (cell|v(true)) if kind == 'number' else cell }}" class="{{ 'n short' if kind == 'number' }}" {{ 'inputmode=decimal' if kind == 'number' }}>
+      {% else %}{{ (cell|num if kind == 'number' else cell) if cell is not none else '' }}{% endif %}
+      {% if name == 'grade' and dupes and r.grade.lower() in dupes %}<span class="dupe">duplicate</span>{% endif %}
+    </td>
+    {% endfor %}
+    {% if edit %}<td class="nowrap"><button form="r{{ r.id }}">Save</button> <button form="r{{ r.id }}" name="delete" value="1" class="link danger" onclick="return confirm('Delete this rate?')">Delete</button></td>{% endif %}
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

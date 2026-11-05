@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Import Excel{% endblock %}
+{% block content %}
+<div class="pagehead"><h1>Import a MasterBOM workbook</h1></div>
+<div class="two">
+<form method="post" action="/import" enctype="multipart/form-data" class="card">
+  <p>Upload a workbook with the same layout as <code>MasterBOM_A02_AATPL_Prototype.xlsx</code>. The import reads the values Excel last calculated, so save the file in Excel first.</p>
+  <label>Workbook (.xlsx) <input type="file" name="file" accept=".xlsx,.xlsm" required></label>
+  <label class="check"><input type="checkbox" name="bom" checked> Create a product from the <b>MasterBOM</b> sheet, including its assembly cost</label>
+  {% if can(user.role, 'edit_rates') %}
+  <label class="check"><input type="checkbox" name="rates" checked> Load or update the <b>rate databases</b> (plastic and sheet-metal materials, machines, runners, coatings)</label>
+  {% else %}
+  <p class="muted small">Rate databases can only be updated by Purchase or an admin.</p>
+  {% endif %}
+  <label>Product name (optional) <input name="product_name" placeholder="Taken from the workbook if left blank"></label>
+  <button class="primary" type="submit">Import</button>
+</form>
+
+{% if report %}
+<section class="card">
+  <h2>Import finished</h2>
+  <table class="kv">
+    {% for k, n in report.counts.items() %}<tr><td>{{ k }}</td><td class="n">{{ n }}</td></tr>{% endfor %}
+  </table>
+  {% for w in report.warnings %}<div class="flash warn">{{ w }}</div>{% endfor %}
+  {% if report.product %}<p><a class="button primary" href="/products/{{ report.product.id }}">Open {{ report.product.name }}</a></p>{% endif %}
+</section>
+{% endif %}
+</div>
+{% endblock %}
