@@ -7,7 +7,7 @@ if sys.version_info < (3, 10):
     sys.exit(
         f"This app needs Python 3.10 or newer, but this is Python {sys.version.split()[0]} "
         f"({sys.executable}).\n"
-        "On Windows, create the project environment with:  py -3.14 -m venv .venv\n"
+        "On Windows, create the project environment with:  py -3.13 -m venv .venv\n"
         "then run:  .venv\\Scripts\\python -m pip install -r requirements.txt\n"
         "and start the app with:  .venv\\Scripts\\python run.py"
     )

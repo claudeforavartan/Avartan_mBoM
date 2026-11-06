@@ -7,14 +7,16 @@ team member a login with their own permissions.
 
 ## Run it on your computer
 
-You need Python 3.10 or newer. On Windows, if `python --version` shows an older
-version, use the `py` launcher as shown below.
+You need a released version of Python 3.10 or newer. Python 3.13 is recommended.
+Preview builds (alpha, beta or rc, for example an early "3.14.0") don't work with the
+app's packages. On Windows, `py --list` shows which Pythons you have, and the `py`
+launcher below picks the right one.
 
 **First time only.** In the project folder, create a private Python environment and
 install the packages:
 
 ```bash
-py -3.14 -m venv .venv
+py -3.13 -m venv .venv
 ```
 ```bash
 .venv\Scripts\python -m pip install -r requirements.txt
