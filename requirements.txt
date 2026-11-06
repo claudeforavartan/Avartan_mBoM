@@ -1,8 +1,11 @@
-fastapi==0.115.6
-uvicorn==0.34.0
+# Tested on Python 3.13 and 3.14 (including 3.14.0). Needs Python 3.10 or newer.
+fastapi==0.142.2
+starlette==1.7.0
+uvicorn==0.54.0
+pydantic==2.13.5
 jinja2==3.1.6
-sqlalchemy==2.0.36
-python-multipart==0.0.20
+sqlalchemy==2.0.55
+python-multipart==0.0.32
 itsdangerous==2.2.0
 openpyxl==3.1.5
 httpx==0.28.1
