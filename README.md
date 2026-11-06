@@ -7,25 +7,37 @@ team member a login with their own permissions.
 
 ## Run it on your computer
 
-You need Python 3.11 or newer (check with `python --version`).
+You need Python 3.10 or newer. On Windows, if `python --version` shows an older
+version, use the `py` launcher as shown below.
 
-1. Get the latest code:
+**First time only.** In the project folder, create a private Python environment and
+install the packages:
+
+```bash
+py -3.14 -m venv .venv
+```
+```bash
+.venv\Scripts\python -m pip install -r requirements.txt
+```
+
+(On Mac or Linux: `python3 -m venv .venv`, then `.venv/bin/python -m pip install -r requirements.txt`.)
+
+**Every time.**
+1. Get the latest code (needs Git installed):
    ```bash
    git pull
    ```
-2. Install the packages. This is needed the first time only, and again if `requirements.txt` changes:
+   If `requirements.txt` changed, run the `pip install` line again.
+2. Start the app:
    ```bash
-   pip install -r requirements.txt
+   .venv\Scripts\python run.py
    ```
-3. Start the app:
-   ```bash
-   python run.py
-   ```
-   In VS Code you can instead press **F5** and choose **Run mBoM app**.
-4. Open **http://localhost:8000** in your browser.
-5. Log in as `admin` with password `admin`. The app will ask you to choose a new password.
-6. Go to **Import Excel** and upload your MasterBOM workbook. This loads the BOM, the
-   assembly cost and all the rate databases.
+   In VS Code you can instead choose the `.venv` interpreter once
+   (`Ctrl+Shift+P`, then **Python: Select Interpreter**), press **F5** and pick **Run mBoM app**.
+3. Open **http://localhost:8000** in your browser.
+4. The first time, log in as `admin` with password `admin`. The app will ask you to
+   choose a new password. Then go to **Import Excel** and upload your MasterBOM
+   workbook. This loads the BOM, the assembly cost and all the rate databases.
 
 To stop the app, press `Ctrl+C` in the terminal where it's running.
 
